@@ -6,57 +6,91 @@ import { Label } from "@/components/ui/label";
 import { Lightbulb, ClipboardList, ChevronRight } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
-// Mock questions - in production this would come from AI
-const mockQuestions = [
-  {
-    id: 1,
-    question: "A block of mass m = 2 kg is pulled along a frictionless horizontal surface by force F of magnitude 10 N, directed at angle θ = 30° above the horizontal. What is the magnitude of the block's acceleration?",
-    options: [
-      "4.33 m/s²",
-      "2.3 m/s²",
-      "4.33 m/s²"
-    ],
-    correctAnswer: 2,
-    diagram: true
-  },
-  {
-    id: 2,
-    question: "What is the derivative of f(x) = 3x² + 2x - 5?",
-    options: [
-      "6x + 2",
-      "3x + 2",
-      "6x - 2"
-    ],
-    correctAnswer: 0
-  },
-  // Add more mock questions as needed
-];
-
 export default function Drill() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { questionCount = 10 } = location.state || {};
+  const { subject, subtopic, difficulty, confidence, questionCount = 10, questions = [] } = location.state || {};
   
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string>("");
   const [answers, setAnswers] = useState<number[]>([]);
   const [showVisualization, setShowVisualization] = useState(false);
 
-  const question = mockQuestions[currentQuestion % mockQuestions.length];
+  const question = questions[currentQuestion];
   const progress = ((currentQuestion + 1) / questionCount) * 100;
 
-  const handleNext = () => {
-    setAnswers([...answers, parseInt(selectedAnswer)]);
+  const handleNext = async () => {
+    const newAnswers = [...answers, parseInt(selectedAnswer)];
+    setAnswers(newAnswers);
     
     if (currentQuestion + 1 >= questionCount) {
-      navigate("/results", {
-        state: { answers, questionCount }
-      });
+      // Calculate score
+      const correctCount = newAnswers.reduce((count, answer, idx) => {
+        return count + (answer === questions[idx].correctAnswer ? 1 : 0);
+      }, 0);
+      const score = Math.round((correctCount / questionCount) * 100);
+
+      // Get AI analysis
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-results`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              subject,
+              subtopic,
+              questions,
+              userAnswers: newAnswers,
+              score,
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to analyze results");
+        }
+
+        const { analysis } = await response.json();
+
+        navigate("/results", {
+          state: {
+            score,
+            questions,
+            userAnswers: newAnswers,
+            analysis,
+            subject,
+            subtopic,
+          },
+        });
+      } catch (error) {
+        console.error("Error analyzing results:", error);
+        // Navigate anyway with basic results
+        navigate("/results", {
+          state: {
+            score,
+            questions,
+            userAnswers: newAnswers,
+            subject,
+            subtopic,
+          },
+        });
+      }
     } else {
       setCurrentQuestion(currentQuestion + 1);
       setSelectedAnswer("");
     }
   };
+
+  if (!question) {
+    return (
+      <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
+        <p className="text-foreground">Loading questions...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -69,7 +103,7 @@ export default function Drill() {
             <Progress value={progress} className="w-64" />
           </div>
           <p className="text-muted-foreground">
-            Targeted practice for deep understanding. Personized questions, instant insights.
+            Targeted practice for deep understanding. Personalized questions, instant insights.
           </p>
         </div>
 
@@ -100,23 +134,15 @@ export default function Drill() {
               {question.question}
             </p>
 
-            {question.diagram && (
-              <div className="bg-muted rounded-lg p-8 mb-6 flex items-center justify-center">
-                <div className="text-center">
-                  <svg width="200" height="120" className="mx-auto">
-                    <line x1="50" y1="80" x2="150" y2="80" stroke="currentColor" strokeWidth="2" />
-                    <line x1="100" y1="80" x2="150" y2="30" stroke="currentColor" strokeWidth="2" />
-                    <circle cx="150" cy="30" r="4" fill="currentColor" />
-                    <text x="155" y="25" className="text-sm">d</text>
-                    <text x="95" y="100" className="text-sm">20</text>
-                  </svg>
-                </div>
+            {showVisualization && question.explanation && (
+              <div className="bg-accent/20 border border-accent rounded-lg p-4 mb-6">
+                <p className="text-sm text-muted-foreground">{question.explanation}</p>
               </div>
             )}
 
             <RadioGroup value={selectedAnswer} onValueChange={setSelectedAnswer}>
               <div className="space-y-3">
-                {question.options.map((option, index) => (
+                {question.options.map((option: string, index: number) => (
                   <div
                     key={index}
                     className={`flex items-center space-x-3 p-4 rounded-lg border transition-smooth ${
@@ -143,7 +169,7 @@ export default function Drill() {
             disabled={!selectedAnswer}
             className="w-full h-12 text-base font-medium bg-gradient-primary hover:opacity-90 transition-smooth"
           >
-            Next Question
+            {currentQuestion + 1 >= questionCount ? "Finish Drill" : "Next Question"}
             <ChevronRight className="w-5 h-5 ml-2" />
           </Button>
         </div>

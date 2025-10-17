@@ -17,10 +17,45 @@ export default function Setup() {
 
   const confidenceLevels = ["Vague", "Got the Basics", "Ready of Master"];
 
-  const handleStart = () => {
-    navigate("/drill", {
-      state: { subject, subtopic, difficulty, confidence: confidenceLevels[confidence[0]], questionCount }
-    });
+  const handleStart = async () => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-questions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            subject,
+            subtopic,
+            difficulty,
+            confidence: confidenceLevels[confidence[0]],
+            questionCount,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to generate questions");
+      }
+
+      const { questions } = await response.json();
+
+      navigate("/drill", {
+        state: {
+          subject,
+          subtopic,
+          difficulty,
+          confidence: confidenceLevels[confidence[0]],
+          questionCount,
+          questions,
+        },
+      });
+    } catch (error) {
+      console.error("Error generating questions:", error);
+      alert("Failed to generate questions. Please try again.");
+    }
   };
 
   return (
