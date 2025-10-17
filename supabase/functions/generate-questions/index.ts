@@ -13,13 +13,13 @@ serve(async (req) => {
   try {
     const { subject, subtopic, difficulty, confidence, questionCount } = await req.json();
     
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const GOOGLE_GEMINI_API_KEY = Deno.env.get("GOOGLE_GEMINI_API_KEY");
+    if (!GOOGLE_GEMINI_API_KEY) {
+      throw new Error("GOOGLE_GEMINI_API_KEY is not configured");
     }
 
     // Craft the prompt based on user configuration
-    const systemPrompt = `You are an expert educational question generator. Generate exactly ${questionCount} multiple choice questions about ${subtopic} in ${subject}.
+    const prompt = `Generate exactly ${questionCount} multiple choice questions about "${subtopic}" in "${subject}".
 
 Difficulty Level: ${difficulty}
 Student Confidence: ${confidence}
@@ -32,7 +32,7 @@ Requirements:
 - Include clear, unambiguous questions
 - Provide educational value in each question
 
-Return ONLY a valid JSON array with this exact structure:
+Return ONLY a valid JSON array with this exact structure (no markdown, no extra text):
 [
   {
     "question": "Question text here?",
@@ -40,51 +40,48 @@ Return ONLY a valid JSON array with this exact structure:
     "correctAnswer": 0,
     "explanation": "Brief explanation of the correct answer"
   }
-]
+]`;
 
-Important: Return ONLY the JSON array, no markdown formatting, no additional text.`;
+    console.log("Generating questions with Gemini Pro");
+    console.log("Subject:", subject, "Subtopic:", subtopic, "Difficulty:", difficulty);
 
-    console.log("Generating questions with prompt:", systemPrompt);
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Generate ${questionCount} ${difficulty} level questions about ${subtopic} in ${subject}.` }
-        ],
-        temperature: 0.8,
-      }),
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GOOGLE_GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.8,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 8192,
+          }
+        }),
+      }
+    );
 
     if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
       const errorText = await response.text();
-      console.error("AI Gateway error:", response.status, errorText);
-      throw new Error(`AI Gateway error: ${response.status}`);
+      console.error("Gemini API error:", response.status, errorText);
+      throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log("AI Response:", JSON.stringify(data, null, 2));
+    console.log("Gemini Response:", JSON.stringify(data, null, 2));
     
-    let questionsText = data.choices[0].message.content.trim();
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+      throw new Error("Invalid response from Gemini API");
+    }
+
+    let questionsText = data.candidates[0].content.parts[0].text.trim();
     
     // Remove markdown code blocks if present
     questionsText = questionsText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
@@ -95,7 +92,7 @@ Important: Return ONLY the JSON array, no markdown formatting, no additional tex
       throw new Error("AI did not return a valid array of questions");
     }
 
-    console.log("Generated questions:", questions);
+    console.log("Generated", questions.length, "questions successfully");
 
     return new Response(
       JSON.stringify({ questions }),
@@ -104,7 +101,10 @@ Important: Return ONLY the JSON array, no markdown formatting, no additional tex
   } catch (error) {
     console.error("Error in generate-questions:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error occurred" }),
+      JSON.stringify({ 
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+        details: error instanceof Error ? error.stack : undefined
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

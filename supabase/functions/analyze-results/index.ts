@@ -13,9 +13,9 @@ serve(async (req) => {
   try {
     const { subject, subtopic, questions, userAnswers, score } = await req.json();
     
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const GOOGLE_GEMINI_API_KEY = Deno.env.get("GOOGLE_GEMINI_API_KEY");
+    if (!GOOGLE_GEMINI_API_KEY) {
+      throw new Error("GOOGLE_GEMINI_API_KEY is not configured");
     }
 
     // Identify wrong answers
@@ -29,11 +29,13 @@ serve(async (req) => {
       }))
       .filter((q: any) => q.wasWrong);
 
-    const systemPrompt = `You are an expert educational analyst. Analyze the student's performance and provide actionable insights.
+    const prompt = `Analyze this student's performance and provide actionable insights.
 
 Subject: ${subject}
 Subtopic: ${subtopic}
 Score: ${score}%
+Total Questions: ${questions.length}
+Wrong Answers: ${wrongQuestions.length}
 
 Questions the student got wrong:
 ${wrongQuestions.map((q: any, i: number) => `
@@ -44,11 +46,11 @@ ${i + 1}. ${q.question}
 `).join('\n')}
 
 Based on this performance, provide:
-1. Specific areas/concepts within ${subtopic} where the student needs improvement
+1. Specific areas/concepts within "${subtopic}" where the student needs improvement
 2. Actionable study recommendations
-3. Conceptual patterns in the mistakes
+3. Overall performance summary
 
-Return ONLY a valid JSON object with this structure:
+Return ONLY a valid JSON object with this structure (no markdown, no extra text):
 {
   "laggingAreas": [
     {
@@ -61,58 +63,55 @@ Return ONLY a valid JSON object with this structure:
     "Specific actionable recommendation"
   ],
   "summary": "Overall performance summary in 2-3 sentences"
-}
+}`;
 
-Important: Return ONLY the JSON object, no markdown formatting, no additional text.`;
+    console.log("Analyzing results with Gemini Pro");
+    console.log("Score:", score, "Wrong:", wrongQuestions.length);
 
-    console.log("Analyzing results with prompt:", systemPrompt);
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Analyze the performance and provide insights.` }
-        ],
-        temperature: 0.7,
-      }),
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GOOGLE_GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 4096,
+          }
+        }),
+      }
+    );
 
     if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
       const errorText = await response.text();
-      console.error("AI Gateway error:", response.status, errorText);
-      throw new Error(`AI Gateway error: ${response.status}`);
+      console.error("Gemini API error:", response.status, errorText);
+      throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log("AI Response:", JSON.stringify(data, null, 2));
+    console.log("Gemini Response:", JSON.stringify(data, null, 2));
     
-    let analysisText = data.choices[0].message.content.trim();
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+      throw new Error("Invalid response from Gemini API");
+    }
+
+    let analysisText = data.candidates[0].content.parts[0].text.trim();
     
     // Remove markdown code blocks if present
     analysisText = analysisText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
     
     const analysis = JSON.parse(analysisText);
 
-    console.log("Generated analysis:", analysis);
+    console.log("Generated analysis successfully");
 
     return new Response(
       JSON.stringify({ analysis }),
@@ -121,7 +120,10 @@ Important: Return ONLY the JSON object, no markdown formatting, no additional te
   } catch (error) {
     console.error("Error in analyze-results:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error occurred" }),
+      JSON.stringify({ 
+        error: error instanceof Error ? error.message : "Unknown error occurred",
+        details: error instanceof Error ? error.stack : undefined
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
