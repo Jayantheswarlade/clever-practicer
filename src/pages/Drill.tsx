@@ -1,30 +1,87 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Lightbulb, ClipboardList, ChevronRight } from "lucide-react";
+import { Lightbulb, ClipboardList, ChevronRight, Loader2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
 export default function Drill() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { subject, subtopic, difficulty, confidence, questionCount = 10, questions = [] } = location.state || {};
+  const { subject, subtopic, difficulty, confidence, questionCount = 10, questions: initialQuestions = [], batchNumber: initialBatch = 1 } = location.state || {};
   
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string>("");
   const [answers, setAnswers] = useState<number[]>([]);
   const [showVisualization, setShowVisualization] = useState(false);
+  const [questions, setQuestions] = useState(initialQuestions);
+  const [batchNumber, setBatchNumber] = useState(initialBatch);
+  const [isLoadingNextBatch, setIsLoadingNextBatch] = useState(false);
 
   const question = questions[currentQuestion];
   const progress = ((currentQuestion + 1) / questionCount) * 100;
+
+  const loadNextBatch = async () => {
+    setIsLoadingNextBatch(true);
+    try {
+      // Calculate performance for current batch
+      const correctCount = answers.reduce((count, answer, idx) => {
+        return count + (answer === questions[idx].correctAnswer ? 1 : 0);
+      }, 0);
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-questions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            subject,
+            subtopic,
+            difficulty,
+            confidence,
+            questionCount: Math.min(5, questionCount - questions.length),
+            batchNumber: batchNumber + 1,
+            performanceData: {
+              correctCount,
+              totalAnswered: answers.length,
+            },
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to generate next batch");
+      }
+
+      const { questions: newQuestions } = await response.json();
+      setQuestions([...questions, ...newQuestions]);
+      setBatchNumber(batchNumber + 1);
+    } catch (error) {
+      console.error("Error loading next batch:", error);
+      alert("Failed to load next batch of questions. Please try again.");
+    } finally {
+      setIsLoadingNextBatch(false);
+    }
+  };
 
   const handleNext = async () => {
     const newAnswers = [...answers, parseInt(selectedAnswer)];
     setAnswers(newAnswers);
     
+    // Check if we need to load next batch
+    const isEndOfCurrentBatch = (currentQuestion + 1) % 5 === 0;
+    const hasMoreQuestions = currentQuestion + 1 < questionCount;
+    const needsMoreQuestions = currentQuestion + 1 >= questions.length;
+    
+    if (isEndOfCurrentBatch && hasMoreQuestions && needsMoreQuestions) {
+      await loadNextBatch();
+    }
+    
     if (currentQuestion + 1 >= questionCount) {
-      // Calculate score
+      // Calculate final score
       const correctCount = newAnswers.reduce((count, answer, idx) => {
         return count + (answer === questions[idx].correctAnswer ? 1 : 0);
       }, 0);
@@ -67,7 +124,6 @@ export default function Drill() {
         });
       } catch (error) {
         console.error("Error analyzing results:", error);
-        // Navigate anyway with basic results
         navigate("/results", {
           state: {
             score,
@@ -84,10 +140,15 @@ export default function Drill() {
     }
   };
 
-  if (!question) {
+  if (!question || isLoadingNextBatch) {
     return (
       <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
-        <p className="text-foreground">Loading questions...</p>
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-foreground">
+            {isLoadingNextBatch ? "Generating next batch based on your performance..." : "Loading questions..."}
+          </p>
+        </div>
       </div>
     );
   }

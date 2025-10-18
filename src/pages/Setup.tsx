@@ -19,6 +19,8 @@ export default function Setup() {
 
   const handleStart = async () => {
     try {
+      // Generate first batch of 5 questions
+      const initialBatchSize = Math.min(5, questionCount);
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-questions`,
         {
@@ -31,7 +33,8 @@ export default function Setup() {
             subtopic,
             difficulty,
             confidence: confidenceLevels[confidence[0]],
-            questionCount,
+            questionCount: initialBatchSize,
+            batchNumber: 1,
           }),
         }
       );
@@ -50,6 +53,7 @@ export default function Setup() {
           confidence: confidenceLevels[confidence[0]],
           questionCount,
           questions,
+          batchNumber: 1,
         },
       });
     } catch (error) {

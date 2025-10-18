@@ -65,11 +65,11 @@ Return ONLY a valid JSON object with this structure (no markdown, no extra text)
   "summary": "Overall performance summary in 2-3 sentences"
 }`;
 
-    console.log("Analyzing results with Gemini Pro");
+    console.log("Analyzing results with Gemini 1.5 Pro");
     console.log("Score:", score, "Wrong:", wrongQuestions.length);
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GOOGLE_GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${GOOGLE_GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: {
