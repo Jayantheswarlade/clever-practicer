@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 export default function Drill() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { subject, subtopic, difficulty, confidence, questionCount = 10, questions: initialQuestions = [], batchNumber: initialBatch = 1 } = location.state || {};
+  const { subject, subtopic, difficulty, confidence, questionCount = 10, questionType = "conceptual", questions: initialQuestions = [], batchNumber: initialBatch = 1 } = location.state || {};
   
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string>("");
@@ -44,6 +44,7 @@ export default function Drill() {
             confidence,
             questionCount: Math.min(5, questionCount - questions.length),
             batchNumber: batchNumber + 1,
+            questionType,
             performanceData: {
               correctCount,
               totalAnswered: answers.length,

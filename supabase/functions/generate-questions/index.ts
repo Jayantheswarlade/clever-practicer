@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { subject, subtopic, difficulty, confidence, questionCount, batchNumber = 1, performanceData = null } = await req.json();
+    const { subject, subtopic, difficulty, confidence, questionCount, batchNumber = 1, performanceData = null, questionType = "conceptual" } = await req.json();
     
     const GOOGLE_GEMINI_API_KEY = Deno.env.get("GOOGLE_GEMINI_API_KEY");
     if (!GOOGLE_GEMINI_API_KEY) {
@@ -46,12 +46,18 @@ serve(async (req) => {
       }
     }
 
+    // Determine question orientation based on type
+    const questionOrientation = questionType === "conceptual" 
+      ? "Focus on conceptual understanding, core ideas, definitions, and theoretical knowledge. Questions should test understanding of fundamental principles and concepts."
+      : "Focus on problem-solving, practical applications, calculations, and real-world scenarios. Questions should test the ability to apply knowledge to solve problems.";
+
     // Craft the prompt based on user configuration and performance
     const prompt = `Generate exactly ${questionsToGenerate} multiple choice questions about "${subtopic}" in "${subject}".
 
 Difficulty Level: ${adjustedDifficulty}
 Student Confidence: ${confidence}
 Batch Number: ${batchNumber}
+Question Type: ${questionType === "conceptual" ? "🧠 Conceptual" : "⚙️ Problem-Solving"}
 ${difficultyGuidance ? `\nAdaptive Guidance: ${difficultyGuidance}` : ""}
 
 Requirements:
@@ -59,6 +65,7 @@ Requirements:
 - Only one correct answer per question
 - Questions should match the ${adjustedDifficulty} difficulty level
 - Adjust complexity based on student confidence: ${confidence}
+- ${questionOrientation}
 ${batchNumber > 1 ? `- Build on concepts from previous questions while introducing new aspects of the topic` : ""}
 - Include clear, unambiguous questions
 - Provide educational value in each question

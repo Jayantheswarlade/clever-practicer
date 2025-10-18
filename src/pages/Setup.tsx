@@ -14,6 +14,7 @@ export default function Setup() {
   const [difficulty, setDifficulty] = useState("Intermediate");
   const [confidence, setConfidence] = useState([2]); // 0: Vague, 1: Got Basics, 2: Ready to Master
   const [questionCount, setQuestionCount] = useState(10);
+  const [questionType, setQuestionType] = useState("conceptual"); // "conceptual" or "problem-solving"
 
   const confidenceLevels = ["Vague", "Got the Basics", "Ready of Master"];
 
@@ -28,14 +29,15 @@ export default function Setup() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            subject,
-            subtopic,
-            difficulty,
-            confidence: confidenceLevels[confidence[0]],
-            questionCount: initialBatchSize,
-            batchNumber: 1,
-          }),
+            body: JSON.stringify({
+              subject,
+              subtopic,
+              difficulty,
+              confidence: confidenceLevels[confidence[0]],
+              questionCount: initialBatchSize,
+              batchNumber: 1,
+              questionType,
+            }),
         }
       );
 
@@ -52,6 +54,7 @@ export default function Setup() {
           difficulty,
           confidence: confidenceLevels[confidence[0]],
           questionCount,
+          questionType,
           questions,
           batchNumber: 1,
         },
@@ -145,8 +148,8 @@ export default function Setup() {
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => setQuestionCount(Math.max(1, questionCount - 1))}
-                  disabled={questionCount <= 1}
+                  onClick={() => setQuestionCount(Math.max(5, questionCount - 5))}
+                  disabled={questionCount <= 5}
                 >
                   <Minus className="w-4 h-4" />
                 </Button>
@@ -156,13 +159,45 @@ export default function Setup() {
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => setQuestionCount(Math.min(20, questionCount + 1))}
+                  onClick={() => setQuestionCount(Math.min(20, questionCount + 5))}
                   disabled={questionCount >= 20}
                 >
                   <Plus className="w-4 h-4" />
                 </Button>
               </div>
-              <p className="text-sm text-muted-foreground mt-2 text-center">Max 20</p>
+              <p className="text-sm text-muted-foreground mt-2 text-center">Multiples of 5 (Max 20)</p>
+            </div>
+
+            <div>
+              <Label className="text-foreground mb-3 block">Question Type Preference</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  onClick={() => setQuestionType("conceptual")}
+                  className={`p-4 rounded-lg border-2 transition-smooth text-left ${
+                    questionType === "conceptual"
+                      ? "border-primary bg-accent"
+                      : "border-input hover:border-primary/50"
+                  }`}
+                >
+                  <div className="text-2xl mb-2">🧠</div>
+                  <div className="font-semibold text-foreground mb-1">Conceptual Questions</div>
+                  <div className="text-sm text-muted-foreground">Focus on understanding core ideas</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuestionType("problem-solving")}
+                  className={`p-4 rounded-lg border-2 transition-smooth text-left ${
+                    questionType === "problem-solving"
+                      ? "border-primary bg-accent"
+                      : "border-input hover:border-primary/50"
+                  }`}
+                >
+                  <div className="text-2xl mb-2">⚙️</div>
+                  <div className="font-semibold text-foreground mb-1">Problem-Solving Questions</div>
+                  <div className="text-sm text-muted-foreground">Focus on application and calculations</div>
+                </button>
+              </div>
             </div>
           </div>
 
