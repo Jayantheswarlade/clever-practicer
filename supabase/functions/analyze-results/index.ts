@@ -65,7 +65,7 @@ Return ONLY a valid JSON object with this structure (no markdown, no extra text)
   "summary": "Overall performance summary in 2-3 sentences"
 }`;
 
-    console.log("Analyzing results with Gemini Pro");
+    console.log("Analyzing results with Gemini 1.5 Pro");
     console.log("Score:", score, "Wrong:", wrongQuestions.length);
 
     const response = await fetch(

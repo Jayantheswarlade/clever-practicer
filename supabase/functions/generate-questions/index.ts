@@ -11,26 +11,58 @@ serve(async (req) => {
   }
 
   try {
-    const { subject, subtopic, difficulty, confidence, questionCount } = await req.json();
+    const { subject, subtopic, difficulty, confidence, questionCount, batchNumber = 1, performanceData = null } = await req.json();
     
     const GOOGLE_GEMINI_API_KEY = Deno.env.get("GOOGLE_GEMINI_API_KEY");
     if (!GOOGLE_GEMINI_API_KEY) {
       throw new Error("GOOGLE_GEMINI_API_KEY is not configured");
     }
 
-    // Craft the prompt based on user configuration
-    const prompt = `Generate exactly ${questionCount} multiple choice questions about "${subtopic}" in "${subject}".
+    // Determine batch size and adjust difficulty based on performance
+    const batchSize = 5;
+    const questionsToGenerate = Math.min(batchSize, questionCount - ((batchNumber - 1) * batchSize));
+    
+    let adjustedDifficulty = difficulty;
+    let difficultyGuidance = "";
+    
+    // Adaptive difficulty adjustment based on performance
+    if (performanceData && batchNumber > 1) {
+      const { correctCount, totalAnswered } = performanceData;
+      const accuracy = correctCount / totalAnswered;
+      
+      if (accuracy >= 0.8) {
+        // Strong performance - increase difficulty
+        difficultyGuidance = "The student is performing excellently. Increase the complexity, introduce more nuanced concepts, and add slightly more challenging questions that require deeper analysis.";
+        if (difficulty === "Beginner") adjustedDifficulty = "Intermediate";
+        else if (difficulty === "Intermediate") adjustedDifficulty = "Advanced";
+      } else if (accuracy <= 0.5) {
+        // Weak performance - decrease difficulty
+        difficultyGuidance = "The student is struggling. Simplify the questions, use clearer language, break down concepts into smaller steps, and focus on fundamental understanding.";
+        if (difficulty === "Advanced") adjustedDifficulty = "Intermediate";
+        else if (difficulty === "Intermediate") adjustedDifficulty = "Beginner";
+      } else {
+        // Moderate performance - maintain difficulty
+        difficultyGuidance = "The student is progressing well. Maintain the current difficulty level while ensuring concepts build naturally on previous questions.";
+      }
+    }
 
-Difficulty Level: ${difficulty}
+    // Craft the prompt based on user configuration and performance
+    const prompt = `Generate exactly ${questionsToGenerate} multiple choice questions about "${subtopic}" in "${subject}".
+
+Difficulty Level: ${adjustedDifficulty}
 Student Confidence: ${confidence}
+Batch Number: ${batchNumber}
+${difficultyGuidance ? `\nAdaptive Guidance: ${difficultyGuidance}` : ""}
 
 Requirements:
 - Each question must have exactly 4 options (A, B, C, D)
 - Only one correct answer per question
-- Questions should match the ${difficulty} difficulty level
+- Questions should match the ${adjustedDifficulty} difficulty level
 - Adjust complexity based on student confidence: ${confidence}
+${batchNumber > 1 ? `- Build on concepts from previous questions while introducing new aspects of the topic` : ""}
 - Include clear, unambiguous questions
 - Provide educational value in each question
+- Ensure natural progression in challenge and engagement
 
 Return ONLY a valid JSON array with this exact structure (no markdown, no extra text):
 [
@@ -42,8 +74,8 @@ Return ONLY a valid JSON array with this exact structure (no markdown, no extra 
   }
 ]`;
 
-    console.log("Generating questions with Gemini Pro");
-    console.log("Subject:", subject, "Subtopic:", subtopic, "Difficulty:", difficulty);
+    console.log("Generating questions with Gemini 1.5 Pro");
+    console.log("Subject:", subject, "Subtopic:", subtopic, "Difficulty:", adjustedDifficulty, "Batch:", batchNumber);
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GOOGLE_GEMINI_API_KEY}`,
