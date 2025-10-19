@@ -43,6 +43,7 @@ export default function Sidebar() {
                   ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                   : "text-sidebar-foreground hover:bg-sidebar-accent/50"
               }`}
+              
             >
               <Icon className="w-5 h-5" />
               <span className="text-sm">{item.title}</span>
