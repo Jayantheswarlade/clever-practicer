@@ -25,10 +25,7 @@ export default function Sidebar() {
     <aside className="w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
       <div className="p-6">
         <Link to="/" className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
-            <BookOpen className="w-5 h-5 text-white" />
-          </div>
-          <span className="text-xl font-bold text-foreground">GPAI</span>
+          <img src="/GPAI.ico" className="w-35 h-7 text-white "/>
         </Link>
       </div>
 
